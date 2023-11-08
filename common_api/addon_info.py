@@ -21,5 +21,6 @@ class LoaderInfo(TypedDict):
 
 class PluginInfo(TypedDict):
     name: str
+    description: str
     loaders: list[LoaderInfo]
     init_fn: Callable[[], None]

@@ -1,8 +1,11 @@
+import os
+import shutil
 import traceback
 from pathlib import Path
 from importlib import import_module
 from types import ModuleType
 from typing import Any, Callable
+from zipfile import ZipFile
 
 import bpy
 
@@ -22,6 +25,8 @@ bl_info = {
     "category": "Import"
 }
 PLUGINS: dict[str, tuple[ModuleType, list[tuple[LoaderInfo, Any]]]] = {}
+uniloader_folder_name = Path(__file__).absolute().parent.stem
+plugins_dir = Path(__file__).absolute().parent / "plugins"
 
 
 def _load_plugin(plugin_dirname: str):
@@ -70,153 +75,21 @@ def _unload_plugin(plugin_dirname: str):
     del PLUGINS[plugin_dirname]
 
 
-class UniLoader_OT_ImportTemplate(Operator):
-    """Importer template"""
-    bl_idname = "uniloader.template"
-    bl_label = "Import template"
-    bl_options = {'UNDO'}
-
-    filepath: StringProperty(
-        subtype='FILE_PATH',
-    )
-    files: CollectionProperty(type=bpy.types.PropertyGroup)
-    filter_glob: StringProperty(default="*.placeholder", options={'HIDDEN'})
-    import_func: Callable[[str, list[str]], set[str]]
-
-    def execute(self, context):
-        return self.import_func(self.filepath, [file.name for file in self.files])
-
-    def invoke(self, context, event):
-        wm = context.window_manager
-        wm.fileselect_add(self)
-        return {'RUNNING_MODAL'}
+def _delete_plugin(plugin_dirname: str):
+    print(f"Deleting \"{plugin_dirname}\" plugin")
+    if plugin_dirname in PLUGINS:
+        _unload_plugin(plugin_dirname)
+    if (plugins_dir / plugin_dirname).exists():
+        shutil.rmtree(plugins_dir / plugin_dirname)
 
 
-class UniLoader_OT_InstalPlugin(Operator):
-    """Importer template"""
-    bl_idname = "uniloader.install_plugin"
-    bl_label = "Install UniLoader plugin"
-    bl_options = {'UNDO'}
-
-    filepath: StringProperty(
-        subtype='FILE_PATH',
-    )
-    filter_glob: StringProperty(default="*.zip", options={'HIDDEN'})
-
-    def execute(self, context):
-        print(self.filepath)
-        return {"FINISHED"}
-
-    def invoke(self, context, event):
-        wm = context.window_manager
-        wm.fileselect_add(self)
-        return {'RUNNING_MODAL'}
-
-
-class UniLoader_MT_Menu(bpy.types.Menu):
-    bl_label = "UniLoader plugins"
-    bl_idname = "uniloader.menu"
-
-    def draw(self, context):
-        layout = self.layout
-        for module, loaders in PLUGINS.values():
-            for loader, operator in loaders:
-                layout.operator(operator.bl_idname, text=loader["name"])
-
-
-def update_addon_state(self, context):
-    """Callback to enable/disable the addon."""
-    # You would insert the logic to enable or disable the addon here
-    if self.enabled:
-        if self.plugin_dir_name not in PLUGINS and not _load_plugin(self.plugin_dir_name):
-            self.enabled = False
-            return
-    else:
-        if self.plugin_dir_name in PLUGINS:
-            _unload_plugin(self.plugin_dir_name)
-    print(f"Addon {self.name} enabled: {self.enabled}")
-
-
-def remove_addon(self, context):
-    """Callback to remove the addon."""
-    # You would insert the logic to remove the addon here
-    print(f"Addon {self.name} has been removed")
-    print("TODO: Remove addon!")
-
-
-class AddonListItem(bpy.types.PropertyGroup):
-    """Group of properties representing an item in the list of addons."""
-    name: bpy.props.StringProperty(
-        name="Name",
-        description="Name of the addon"
-    )
-    plugin_dir_name: bpy.props.StringProperty(
-        name="Internal name"
-    )
-    description: bpy.props.StringProperty(
-        name="Description",
-        description="Description of the addon"
-    )
-    enabled: bpy.props.BoolProperty(
-        name="Enabled",
-        description="Whether the addon is enabled or not",
-        update=update_addon_state
-    )
-
-
-class UniLoader_UL_pluginlist(bpy.types.UIList):
-    """Custom UIList to display more properties of AddonListItem."""
-
-    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
-        row = layout.row(align=True)
-
-        # Use a split layout to allocate space for the name and the toggle
-        split = row.split(factor=0.15)
-        row = split.row()
-        # Instead of a label, we use a prop with a toggle, bound to the 'enabled' property
-        row.prop(item, "enabled", emboss=False, icon_only=True,
-                 icon='CHECKBOX_HLT' if item.enabled else 'CHECKBOX_DEHLT')
-        row.label(text=item.name)
-        # Optionally, you can add additional UI elements here, like buttons or labels, to the right of the toggle
-        # For example, to display the description as an icon with a tooltip:
-        sub = split.row(align=True)
-        sub.label(icon='INFO', text=item.description)  # An info icon; you can make it show the description on hover
-
-
-class UniLoaderAddonPreferences(AddonPreferences):
-    bl_idname = __package__
-
-    addons: bpy.props.CollectionProperty(type=AddonListItem)
-    selected_addon_index: bpy.props.IntProperty()
-
-    def draw(self, context):
-        layout = self.layout
-        row = layout.row()
-        row.template_list("UniLoader_UL_pluginlist", "addons", self, "addons", self, "selected_addon_index")
-
-        row = layout.row()
-        row.operator("uniloader.install_plugin", text="Install Addon")
-
-
-CLASSES = [UniLoader_MT_Menu, UniLoader_OT_InstalPlugin, AddonListItem, UniLoader_UL_pluginlist, UniLoaderAddonPreferences, ]
-
-uniloader_folder_name = Path(__file__).absolute().parent.stem
-plugins_dir = Path(__file__).absolute().parent / "plugins"
-
-register_, unregister_ = bpy.utils.register_classes_factory(CLASSES)
-
-
-def menu_import(self, context):
-    self.layout.menu(UniLoader_MT_Menu.bl_idname)
-
-
-def register():
-    register_()
-    bpy.types.TOPBAR_MT_file_import.append(menu_import)
+def _scan_plugins():
     addon_prefs = bpy.context.preferences.addons[__package__].preferences
     registered_addons = addon_prefs.addons
 
-    # Reloading after plugin was loaded. Mean some plugins were loaded
+    known_addons = [addon.plugin_dir_name for addon in registered_addons]
+
+    # Reloading plugins if they were already loaded
     plugin_dirs = list(PLUGINS.keys())
     for plugin_dir in plugin_dirs:
         _unload_plugin(plugin_dir)
@@ -224,6 +97,8 @@ def register():
     if plugin_dirs:
         for plugin_dir_name in plugin_dirs:
             _load_plugin(plugin_dir_name)
+            if plugin_dir_name in known_addons:
+                continue
 
             plugin_info = PLUGINS[plugin_dir_name][0].plugin_info
             addon_item = registered_addons.add()
@@ -252,6 +127,182 @@ def register():
             addon_item.plugin_dir_name = plugin_dir.stem
             addon_item.description = plugin_info.get("description", "")
             addon_item.enabled = False
+
+
+class UniLoader_OT_ImportTemplate(Operator):
+    """Importer template"""
+    bl_idname = "uniloader.template"
+    bl_label = "Import template"
+    bl_options = {'UNDO'}
+
+    filepath: StringProperty(
+        subtype='FILE_PATH',
+    )
+    files: CollectionProperty(type=bpy.types.PropertyGroup)
+    filter_glob: StringProperty(default="*.placeholder", options={'HIDDEN'})
+    import_func: Callable[[str, list[str]], set[str]]
+
+    def execute(self, context):
+        return self.import_func(self.filepath, [file.name for file in self.files])
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        wm.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+
+class UniLoader_OT_InstalPlugin(Operator):
+    """Install plugin"""
+    bl_idname = "uniloader.install_plugin"
+    bl_label = "Install UniLoader plugin"
+    bl_options = {'UNDO'}
+
+    filepath: StringProperty(
+        subtype='FILE_PATH',
+    )
+    filter_glob: StringProperty(default="*.zip", options={'HIDDEN'})
+
+    def execute(self, context):
+        with ZipFile(self.filepath, "r") as f:
+            print(f"Installing {Path(self.filepath).stem} addon to {plugins_dir}")
+            f.extractall(plugins_dir)
+        _scan_plugins()
+        return {"FINISHED"}
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        wm.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+
+class UniLoader_OT_DeletePlugin(bpy.types.Operator):
+    """Delete the selected plugin"""
+    bl_idname = "uniloader.delete_plugin"
+    bl_label = "Delete Selected Plugin"
+
+    @classmethod
+    def poll(cls, context):
+        prefs = context.preferences.addons[__package__].preferences
+        return prefs.selected_addon_index < len(prefs.addons)
+
+    def execute(self, context):
+        prefs = context.preferences.addons[__package__].preferences
+        index = prefs.selected_addon_index
+        plugin_to_remove = prefs.addons[index]
+        _delete_plugin(plugin_to_remove.plugin_dir_name)
+        prefs.addons.remove(index)
+        prefs.selected_addon_index = min(max(0, index - 1), len(prefs.addons) - 1)
+        return {'FINISHED'}
+
+
+class UniLoader_OT_RefreshPlugins(Operator):
+    """Refresh plugins"""
+    bl_idname = "uniloader.refresh_plugins"
+    bl_label = "Refresh installed UniLoader plugins"
+    bl_options = {'UNDO'}
+
+    def execute(self, context):
+        _scan_plugins()
+        return {"FINISHED"}
+
+
+class UniLoader_MT_Menu(bpy.types.Menu):
+    bl_label = "UniLoader plugins"
+    bl_idname = "uniloader.menu"
+
+    def draw(self, context):
+        layout = self.layout
+        if PLUGINS:
+            for module, loaders in PLUGINS.values():
+                for loader, operator in loaders:
+                    layout.operator(operator.bl_idname, text=loader["name"])
+        else:
+            layout.label(text="No plugins installed/enabled")
+
+
+def update_addon_state(self, context):
+    """Callback to enable/disable the addon."""
+    # You would insert the logic to enable or disable the addon here
+    if self.enabled:
+        if self.plugin_dir_name not in PLUGINS and not _load_plugin(self.plugin_dir_name):
+            self.enabled = False
+            return
+    else:
+        if self.plugin_dir_name in PLUGINS:
+            _unload_plugin(self.plugin_dir_name)
+    print(f"Addon {self.name} enabled: {self.enabled}")
+
+
+class AddonListItem(bpy.types.PropertyGroup):
+    """Group of properties representing an item in the list of addons."""
+    name: bpy.props.StringProperty(
+        name="Name",
+        description="Name of the addon"
+    )
+    plugin_dir_name: bpy.props.StringProperty(
+        name="Internal name"
+    )
+    description: bpy.props.StringProperty(
+        name="Description",
+        description="Description of the addon"
+    )
+    enabled: bpy.props.BoolProperty(
+        name="Enabled",
+        description="Whether the addon is enabled or not",
+        update=update_addon_state
+    )
+
+
+class UniLoader_UL_pluginlist(bpy.types.UIList):
+    """Custom UIList to display more properties of AddonListItem."""
+
+    def draw_item(self, context, layout, data, item, icon, active_data, active_propname, index):
+        row = layout.row(align=True)
+
+        split = row.split(factor=0.15)
+        row = split.row()
+        row.prop(item, "enabled", emboss=False, icon_only=True,
+                 icon='CHECKBOX_HLT' if item.enabled else 'CHECKBOX_DEHLT')
+        row.label(text=item.name)
+
+        row = split.row()
+        row.label(text="Path: " + item.plugin_dir_name, icon='FILE_FOLDER')
+
+        sub = split.row(align=True)
+        sub.label(icon='INFO', text=item.description)
+
+
+class UniLoaderAddonPreferences(AddonPreferences):
+    bl_idname = __package__
+
+    addons: bpy.props.CollectionProperty(type=AddonListItem)
+    selected_addon_index: bpy.props.IntProperty()
+
+    def draw(self, context):
+        layout = self.layout
+        row = layout.row()
+        row.template_list("UniLoader_UL_pluginlist", "addons", self, "addons", self, "selected_addon_index")
+
+        row = layout.row()
+        row.operator(UniLoader_OT_InstalPlugin.bl_idname, text="Install plugin")
+        row.operator(UniLoader_OT_RefreshPlugins.bl_idname, text="Refresh plugins")
+        row.operator("uniloader.delete_plugin", text="Delete plugin")
+
+
+CLASSES = [UniLoader_MT_Menu, UniLoader_OT_InstalPlugin,
+           UniLoader_OT_RefreshPlugins, AddonListItem,
+           UniLoader_UL_pluginlist, UniLoaderAddonPreferences, UniLoader_OT_DeletePlugin]
+register_, unregister_ = bpy.utils.register_classes_factory(CLASSES)
+
+
+def menu_import(self, context):
+    self.layout.menu(UniLoader_MT_Menu.bl_idname)
+
+
+def register():
+    register_()
+    bpy.types.TOPBAR_MT_file_import.append(menu_import)
+    _scan_plugins()
 
 
 def unregister():

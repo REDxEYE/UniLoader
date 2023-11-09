@@ -20,7 +20,9 @@ class LoaderInfo(TypedDict):
 
 
 class PluginInfo(TypedDict):
-    name: str
+    name: str  # Name shown in plugin list
+    id: str  # Must match repo name
+    version: tuple[int, int, int]
     description: str
     loaders: list[LoaderInfo]
     init_fn: Callable[[], None]

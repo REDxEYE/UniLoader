@@ -1,12 +1,14 @@
+import importlib
 import os
 import shutil
+import sys
 import traceback
+from io import BytesIO
 from pathlib import Path
-from importlib import import_module
 from types import ModuleType
 from typing import Any, Callable
 from zipfile import ZipFile
-
+import requests
 import bpy
 
 from bpy.props import (BoolProperty, CollectionProperty, EnumProperty,
@@ -29,10 +31,24 @@ uniloader_folder_name = Path(__file__).absolute().parent.stem
 plugins_dir = Path(__file__).absolute().parent / "plugins"
 
 
+def _reload_module(name):
+    if name in sys.modules:
+        importlib.reload(sys.modules[name])
+
+
+def _reload_module_recursive(base_name):
+    for name in list(sys.modules.keys()):
+        if name.startswith(base_name):
+            _reload_module(name)
+
+
 def _load_plugin(plugin_dirname: str):
     print(f"Trying to load \"{plugin_dirname}\" plugin")
+
+    _reload_module_recursive(plugin_dirname)
+
     try:
-        plugin = import_module(".plugins." + plugin_dirname, uniloader_folder_name)
+        plugin = importlib.import_module(".plugins." + plugin_dirname, uniloader_folder_name)
         plugin_info: PluginInfo = plugin.plugin_info
     except Exception as e:
         print(f"Failed to load {plugin_dirname} due to {e}:")
@@ -103,6 +119,8 @@ def _scan_plugins():
             plugin_info = PLUGINS[plugin_dir_name][0].plugin_info
             addon_item = registered_addons.add()
             addon_item.name = plugin_info["name"]
+            addon_item.id = plugin_info["id"]
+            addon_item.version = "{}.{}.{}".format(*plugin_info["version"])
             addon_item.plugin_dir_name = plugin_dir_name
             addon_item.description = plugin_info.get("description", "")
             addon_item.enabled = True
@@ -116,7 +134,7 @@ def _scan_plugins():
                 _load_plugin(plugin_dir.stem)
         else:
             try:
-                plugin = import_module(".plugins." + plugin_dir.stem, uniloader_folder_name)
+                plugin = importlib.import_module(".plugins." + plugin_dir.stem, uniloader_folder_name)
                 plugin_info: PluginInfo = plugin.plugin_info
             except Exception as e:
                 print(f"Failed to load {plugin_dir.stem} due to {e}:")
@@ -124,6 +142,8 @@ def _scan_plugins():
                 continue
             addon_item = registered_addons.add()
             addon_item.name = plugin_info["name"]
+            addon_item.id = plugin_info["id"]
+            addon_item.version = "{}.{}.{}".format(*plugin_info["version"])
             addon_item.plugin_dir_name = plugin_dir.stem
             addon_item.description = plugin_info.get("description", "")
             addon_item.enabled = False
@@ -175,6 +195,92 @@ class UniLoader_OT_InstalPlugin(Operator):
         return {'RUNNING_MODAL'}
 
 
+class UniLoader_OT_InstallGitPlugin(Operator):
+    """Install plugin"""
+    bl_idname = "uniloader.install_plugin_git"
+    bl_label = "Install UniLoader plugin"
+    bl_options = {'UNDO'}
+
+    github_url: bpy.props.StringProperty(
+        name="GitHub URL",
+        description="Enter the URL of the GitHub repository",
+    )
+
+    def draw(self, context):
+        scn = context.scene
+        layout = self.layout
+        layout.label(text="Github link")
+        layout.prop(self, "github_url")
+        layout.separator()
+
+    def execute(self, context):
+        if not self.github_url:
+            self.report({'ERROR'}, "GitHub URL is empty.")
+            return {'CANCELLED'}
+
+        addon_prefs = bpy.context.preferences.addons[__package__].preferences
+        registered_addons = addon_prefs.addons
+
+        _, _, user, repo = Path(self.github_url).parts
+
+        tags_resp = requests.get(f"https://api.github.com/repos/{user}/{repo}/tags")
+        if tags_resp.status_code != 200:
+            self.report({'ERROR'}, "Failed to get repo tags")
+            return {"CANCELLED"}
+
+        existing_addon_info = None
+        for addon in registered_addons:
+            if addon.id == repo:
+                existing_addon_info = existing_addon_info
+
+        tags = tags_resp.json()
+        if existing_addon_info is not None:
+            current_version = tuple(map(int, existing_addon_info.version.split(".")))
+            chosen_tag = tags[-1]
+            chosen_version = tuple(map(int, chosen_tag["name"].split(".")))
+            if current_version >= chosen_version:
+                self.report({'INFO'}, "Newer or same version is already installed")
+                return {"CANCELLED"}
+        else:
+            chosen_tag = tags[-1]
+
+        zip_resp = requests.get(chosen_tag["zipball_url"])
+        if zip_resp.status_code != 200:
+            self.report({'ERROR'}, "Failed to download zip")
+            return {"CANCELLED"}
+        sha = chosen_tag["commit"]["sha"][:7]
+
+        def extract_and_rename(zip_data, extract_to, rename_from, rename_to):
+            with ZipFile(zip_data, 'r') as zip_ref:
+                for member in zip_ref.infolist():
+                    if member.file_size == 0:
+                        continue
+                    if member.filename.startswith(rename_from):
+                        renamed_file = member.filename.replace(rename_from, rename_to, 1)
+                        target_path = Path(extract_to) / renamed_file
+                        print(member.filename)
+                        print(target_path)
+                        print("==============")
+                        source = zip_ref.open(member)
+                        os.makedirs(target_path.parent, exist_ok=True)
+                        target = open(target_path, "wb")
+                        with source, target:
+                            shutil.copyfileobj(source, target)
+                    else:
+                        # If the file/folder is not the one we want to rename, extract as is
+                        zip_ref.extract(member, extract_to)
+
+        extract_and_rename(BytesIO(zip_resp.content), plugins_dir, f"{user}-{repo}-{sha}", repo)
+        _scan_plugins()
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        width = 400 * bpy.context.preferences.system.pixel_size
+        status = context.window_manager.invoke_props_dialog(self,
+                                                            width=int(width))
+        return status
+
+
 class UniLoader_OT_DeletePlugin(bpy.types.Operator):
     """Delete the selected plugin"""
     bl_idname = "uniloader.delete_plugin"
@@ -222,7 +328,6 @@ class UniLoader_MT_Menu(bpy.types.Menu):
 
 def update_addon_state(self, context):
     """Callback to enable/disable the addon."""
-    # You would insert the logic to enable or disable the addon here
     if self.enabled:
         if self.plugin_dir_name not in PLUGINS and not _load_plugin(self.plugin_dir_name):
             self.enabled = False
@@ -241,6 +346,12 @@ class AddonListItem(bpy.types.PropertyGroup):
     )
     plugin_dir_name: bpy.props.StringProperty(
         name="Internal name"
+    )
+    id: bpy.props.StringProperty(
+        name="Internal id"
+    )
+    version: bpy.props.StringProperty(
+        name="Internal version"
     )
     description: bpy.props.StringProperty(
         name="Description",
@@ -265,10 +376,13 @@ class UniLoader_UL_pluginlist(bpy.types.UIList):
                  icon='CHECKBOX_HLT' if item.enabled else 'CHECKBOX_DEHLT')
         row.label(text=item.name)
 
+        split = split.split(factor=0.05)
+        split.label(text=f"{item.version}")
+        split = split.split(factor=0.3)
         row = split.row()
         row.label(text="Path: " + item.plugin_dir_name, icon='FILE_FOLDER')
 
-        sub = split.row(align=True)
+        sub = split.row()
         sub.label(icon='INFO', text=item.description)
 
 
@@ -284,14 +398,17 @@ class UniLoaderAddonPreferences(AddonPreferences):
         row.template_list("UniLoader_UL_pluginlist", "addons", self, "addons", self, "selected_addon_index")
 
         row = layout.row()
-        row.operator(UniLoader_OT_InstalPlugin.bl_idname, text="Install plugin")
+        install_split = row.box()
+        install_split.operator(UniLoader_OT_InstalPlugin.bl_idname, text="Install plugin")
+        install_split.operator(UniLoader_OT_InstallGitPlugin.bl_idname, text="Install plugin from GitHub")
         row.operator(UniLoader_OT_RefreshPlugins.bl_idname, text="Refresh plugins")
         row.operator("uniloader.delete_plugin", text="Delete plugin")
 
 
-CLASSES = [UniLoader_MT_Menu, UniLoader_OT_InstalPlugin,
+CLASSES = [UniLoader_MT_Menu, UniLoader_OT_InstalPlugin, UniLoader_OT_InstallGitPlugin,
            UniLoader_OT_RefreshPlugins, AddonListItem,
-           UniLoader_UL_pluginlist, UniLoaderAddonPreferences, UniLoader_OT_DeletePlugin]
+           UniLoader_UL_pluginlist, UniLoaderAddonPreferences,
+           UniLoader_OT_DeletePlugin, ]
 register_, unregister_ = bpy.utils.register_classes_factory(CLASSES)
 
 

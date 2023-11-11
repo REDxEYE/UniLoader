@@ -258,9 +258,6 @@ class UniLoader_OT_InstallGitPlugin(Operator):
                     if member.filename.startswith(rename_from):
                         renamed_file = member.filename.replace(rename_from, rename_to, 1)
                         target_path = Path(extract_to) / renamed_file
-                        print(member.filename)
-                        print(target_path)
-                        print("==============")
                         source = zip_ref.open(member)
                         os.makedirs(target_path.parent, exist_ok=True)
                         target = open(target_path, "wb")

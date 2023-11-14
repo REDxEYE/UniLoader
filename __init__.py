@@ -3,6 +3,7 @@ import os
 import shutil
 import sys
 import traceback
+import urllib.parse
 from io import BytesIO
 from pathlib import Path
 from types import ModuleType
@@ -29,8 +30,8 @@ bl_info = {
 PLUGINS: dict[str, tuple[ModuleType, list[tuple[LoaderInfo, Any]]]] = {}
 uniloader_folder_name = Path(__file__).absolute().parent.stem
 plugins_dir = Path(__file__).absolute().parent / "plugins"
-if not plugins_dir.exists():
-    os.makedirs(plugins_dir,exist_ok=True)
+os.makedirs(plugins_dir, exist_ok=True)
+
 
 def _reload_module(name):
     if name in sys.modules:
@@ -221,8 +222,8 @@ class UniLoader_OT_InstallGitPlugin(Operator):
 
         addon_prefs = bpy.context.preferences.addons[__package__].preferences
         registered_addons = addon_prefs.addons
-
-        _, _, user, repo = Path(self.github_url).parts
+        scheme, netloc, path, params, query, fragment = urllib.parse.urlparse(self.github_url.strip().rstrip())
+        *_, user, repo = Path(path).parts
 
         tags_resp = requests.get(f"https://api.github.com/repos/{user}/{repo}/tags")
         if tags_resp.status_code != 200:
@@ -235,15 +236,17 @@ class UniLoader_OT_InstallGitPlugin(Operator):
                 existing_addon_info = existing_addon_info
 
         tags = tags_resp.json()
+        if not tags:
+            self.report({'ERROR'}, f"No tags found for {user}/{repo}")
+            return {"CANCELLED"}
+
+        chosen_tag = tags[-1]
         if existing_addon_info is not None:
             current_version = tuple(map(int, existing_addon_info.version.split(".")))
-            chosen_tag = tags[-1]
             chosen_version = tuple(map(int, chosen_tag["name"].split(".")))
             if current_version >= chosen_version:
                 self.report({'INFO'}, "Newer or same version is already installed")
                 return {"CANCELLED"}
-        else:
-            chosen_tag = tags[-1]
 
         zip_resp = requests.get(chosen_tag["zipball_url"])
         if zip_resp.status_code != 200:

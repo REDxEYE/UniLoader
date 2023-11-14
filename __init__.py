@@ -29,7 +29,8 @@ bl_info = {
 PLUGINS: dict[str, tuple[ModuleType, list[tuple[LoaderInfo, Any]]]] = {}
 uniloader_folder_name = Path(__file__).absolute().parent.stem
 plugins_dir = Path(__file__).absolute().parent / "plugins"
-
+if not plugins_dir.exists():
+    os.makedirs(plugins_dir,exist_ok=True)
 
 def _reload_module(name):
     if name in sys.modules:

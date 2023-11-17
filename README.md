@@ -8,5 +8,6 @@ Addon with addons. Just a convenience tool for me so i don't need to write same 
 * Open addon preferences.
 * Install sub-addons via addon preferences gui
   * Install from zip.
-  * Install from githib link like `https://github.com/REDxEYE/AmnesiaLoader`.
+  * **OR**
+  * Install from github repo link, e.g `https://github.com/REDxEYE/AmnesiaLoader`.
 * Enable addon.

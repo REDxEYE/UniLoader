@@ -223,11 +223,14 @@ class UniLoader_OT_InstallGitPlugin(Operator):
         addon_prefs = bpy.context.preferences.addons[__package__].preferences
         registered_addons = addon_prefs.addons
         scheme, netloc, path, params, query, fragment = urllib.parse.urlparse(self.github_url.strip().rstrip())
+        if netloc != "github.com":
+            self.report({'ERROR'}, "Only installing from github is supported.")
+            return {"CANCELLED"}
         *_, user, repo = Path(path).parts
 
         tags_resp = requests.get(f"https://api.github.com/repos/{user}/{repo}/tags")
         if tags_resp.status_code != 200:
-            self.report({'ERROR'}, "Failed to get repo tags")
+            self.report({'ERROR'}, "Failed to get repo tags.")
             return {"CANCELLED"}
 
         existing_addon_info = None
@@ -237,7 +240,7 @@ class UniLoader_OT_InstallGitPlugin(Operator):
 
         tags = tags_resp.json()
         if not tags:
-            self.report({'ERROR'}, f"No tags found for {user}/{repo}")
+            self.report({'ERROR'}, f"No tags found for {user}/{repo}.")
             return {"CANCELLED"}
 
         chosen_tag = tags[-1]
@@ -245,7 +248,7 @@ class UniLoader_OT_InstallGitPlugin(Operator):
             current_version = tuple(map(int, existing_addon_info.version.split(".")))
             chosen_version = tuple(map(int, chosen_tag["name"].split(".")))
             if current_version >= chosen_version:
-                self.report({'INFO'}, "Newer or same version is already installed")
+                self.report({'INFO'}, "Newer or same version is already installed.")
                 return {"CANCELLED"}
 
         zip_resp = requests.get(chosen_tag["zipball_url"])

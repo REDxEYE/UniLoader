@@ -125,7 +125,7 @@ def _scan_plugins():
     addon_prefs = bpy.context.preferences.addons[__package__].preferences
     registered_addons = addon_prefs.addons
 
-    known_addons = [addon.plugin_dir_name for addon in registered_addons]
+    known_addons = {addon.plugin_dir_name: addon for addon in registered_addons}
 
     # Reloading plugins if they were already loaded
     plugin_dirs = list(PLUGINS.keys())
@@ -136,6 +136,12 @@ def _scan_plugins():
         for plugin_dir_name in plugin_dirs:
             _load_plugin(plugin_dir_name)
             if plugin_dir_name in known_addons:
+                plugin_info: PluginInfo = PLUGINS[plugin_dir_name][0].plugin_info
+                addon_item = known_addons[plugin_dir_name]
+                addon_item.name = plugin_info["name"]
+                addon_item.id = plugin_info["id"]
+                addon_item.version = "{}.{}.{}".format(*plugin_info["version"])
+                addon_item.description = plugin_info.get("description", "")
                 continue
 
             plugin_info = PLUGINS[plugin_dir_name][0].plugin_info
@@ -147,13 +153,20 @@ def _scan_plugins():
             addon_item.description = plugin_info.get("description", "")
             addon_item.enabled = True
 
-    known_addons = [addon.plugin_dir_name for addon in registered_addons]
+    known_addons = {addon.plugin_dir_name: addon for addon in registered_addons}
     enabled_addons = [addon.plugin_dir_name for addon in registered_addons if addon.enabled]
 
     for plugin_dir in plugins_dir.iterdir():
         if plugin_dir.stem in known_addons:
             if plugin_dir.stem in enabled_addons:
                 _load_plugin(plugin_dir.stem)
+                plugin_info: PluginInfo = PLUGINS[plugin_dir.stem][0].plugin_info
+                addon_item = known_addons[plugin_dir.stem]
+                addon_item.name = plugin_info["name"]
+                addon_item.id = plugin_info["id"]
+                addon_item.version = "{}.{}.{}".format(*plugin_info["version"])
+                addon_item.plugin_dir_name = plugin_dir.stem
+                addon_item.description = plugin_info.get("description", "")
         else:
             try:
                 plugin = importlib.import_module(".plugins." + plugin_dir.stem, uniloader_folder_name)
@@ -275,7 +288,7 @@ class UniLoader_OT_InstallGitPlugin(Operator):
             self.report({'ERROR'}, f"No tags found for {user}/{repo}.")
             return {"CANCELLED"}
 
-        chosen_tag = tags[-1]
+        chosen_tag = tags[0]
         if existing_addon_info is not None:
             current_version = tuple(map(int, existing_addon_info.version.split(".")))
             chosen_version = tuple(map(int, chosen_tag["name"].split(".")))

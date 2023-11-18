@@ -185,6 +185,10 @@ class Buffer(abc.ABC, io.RawIOBase):
         with self.save_current_offset():
             return self.read_uint32()
 
+    def peek_uint16(self):
+        with self.save_current_offset():
+            return self.read_uint16()
+
     def set_big_endian(self):
         self._endian = '>'
 

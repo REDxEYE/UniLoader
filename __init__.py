@@ -27,7 +27,7 @@ bl_info = {
     "description": "Addon that provide api for other importers(UniLoader sub-addons).",
     "category": "Import"
 }
-PLUGINS: dict[str, tuple[ModuleType, list[tuple[LoaderInfo, Any]]]] = {}
+PLUGINS: dict[str, tuple[ModuleType, Any, list[tuple[LoaderInfo, Any]]]] = {}
 uniloader_folder_name = Path(__file__).absolute().parent.stem
 plugins_dir = Path(__file__).absolute().parent / "plugins"
 os.makedirs(plugins_dir, exist_ok=True)
@@ -60,13 +60,18 @@ def _load_plugin(plugin_dirname: str):
     plugin.plugin_init()
     loaders = []
     new_classes = []
+    operators = []
     for loader in plugin_info["loaders"]:
-        plugin_operator = type(f"UniLoader_OT_Import{loader['id'].upper()}", (UniLoader_OT_ImportTemplate,),
-                               {
-                                   "import_func": loader["import_fn"],
-                                   "bl_idname": f"uniloader.{loader['id']}",
-                                   "bl_label": loader["name"]
-                               })
+        plugin_operator = type(
+            f"UniLoader_OT_Import{loader['id'].upper()}",
+            (UniLoader_OT_ImportTemplate,),
+            {
+                "import_func": loader["import_fn"],
+                "bl_idname": f"uniloader.{loader['id']}",
+                "bl_label": loader["name"]
+            }
+        )
+        operators.append((plugin_operator.bl_idname, loader["name"]))
         annotations = plugin_operator.__annotations__
         annotations["filter_glob"] = StringProperty(default=";".join(loader["exts"]), options={'HIDDEN'})
         for prop in loader["properties"]:
@@ -74,7 +79,18 @@ def _load_plugin(plugin_dirname: str):
             annotations[prop["prop_name"]] = t(name=prop["name"], **prop["kwargs"])
         loaders.append((loader, plugin_operator))
         new_classes.append(plugin_operator)
-    PLUGINS[plugin_dirname] = plugin, loaders
+
+    plugin_menu_operator = type(
+        f"UniLoader_MT_GroupMenu{plugin_info['id'].upper()}",
+        (UniLoader_MT_GroupMenuTemplate,),
+        {
+            "operators": operators,
+            "bl_idname": f"uniloader.menu_{plugin_info['id']}",
+            "bl_label": plugin_info["name"]
+        }
+    )
+    new_classes.append(plugin_menu_operator)
+    PLUGINS[plugin_dirname] = plugin, plugin_menu_operator, loaders
     for cls in new_classes:
         bpy.utils.register_class(cls)
     return True
@@ -84,12 +100,16 @@ def _unload_plugin(plugin_dirname: str):
     print(f"Trying to unload \"{plugin_dirname}\" plugin")
     if plugin_dirname not in PLUGINS:
         return
-    plugin, loaders = PLUGINS[plugin_dirname]
+    plugin, menu, loaders = PLUGINS[plugin_dirname]
     for _, operator in loaders:
         try:
             bpy.utils.unregister_class(operator)
         except RuntimeError:
             continue
+    try:
+        bpy.utils.unregister_class(menu)
+    except RuntimeError:
+        pass
     del PLUGINS[plugin_dirname]
 
 
@@ -171,6 +191,18 @@ class UniLoader_OT_ImportTemplate(Operator):
         wm = context.window_manager
         wm.fileselect_add(self)
         return {'RUNNING_MODAL'}
+
+
+class UniLoader_MT_GroupMenuTemplate(bpy.types.Menu):
+    bl_label = "TEMPLATE"
+    bl_idname = "IMPORT_MT_group_template"
+
+    operators: list[tuple[str, str]]
+
+    def draw(self, context):
+        layout = self.layout
+        for operator_idname, operator_desc in self.operators:
+            layout.operator(operator_idname, text=operator_desc)
 
 
 class UniLoader_OT_InstalPlugin(Operator):
@@ -323,9 +355,8 @@ class UniLoader_MT_Menu(bpy.types.Menu):
     def draw(self, context):
         layout = self.layout
         if PLUGINS:
-            for module, loaders in PLUGINS.values():
-                for loader, operator in loaders:
-                    layout.operator(operator.bl_idname, text=loader["name"])
+            for module, menu, _ in PLUGINS.values():
+                layout.menu(menu.bl_idname, text=menu.bl_label)
         else:
             layout.label(text="No plugins installed/enabled")
 
@@ -428,7 +459,8 @@ def register():
 
 def unregister():
     unregister_()
-    for _, operators in PLUGINS.values():
+    for _, menu, operators in PLUGINS.values():
         for _, operator in operators:
             bpy.utils.unregister_class(operator)
+        bpy.utils.unregister_class(menu)
     bpy.types.TOPBAR_MT_file_import.remove(menu_import)

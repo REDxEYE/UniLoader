@@ -1,15 +1,9 @@
 import ctypes
 import platform
-import weakref
 from ctypes import cdll
 from enum import IntEnum, auto
 from pathlib import Path
 from typing import Optional
-
-
-class UnsupportedSystem(Exception):
-    pass
-
 
 _platform_info = platform.uname()
 _lib_path: Optional[Path] = Path(__file__).parent
@@ -19,7 +13,7 @@ if _platform_info.system == "Windows":
 elif _platform_info.system == 'Linux':
     _lib_path /= "libTextureDecoder.so"
 else:
-    raise UnsupportedSystem(f'System {_platform_info} not suppported')
+    raise NotImplementedError(f'System {_platform_info} not supported')
 
 assert _lib_path.exists()
 

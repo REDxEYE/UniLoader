@@ -12,6 +12,10 @@ if _platform_info.system == "Windows":
 
 elif _platform_info.system == 'Linux':
     _lib_path /= "libTextureDecoder.so"
+
+elif _platform_info.system == 'Darwin':
+    _lib_path /= "libTextureDecoder.dylib"
+
 else:
     raise NotImplementedError(f'System {_platform_info} not supported')
 

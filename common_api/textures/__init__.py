@@ -2,7 +2,7 @@ import bpy
 import numpy as np
 
 from .texture_decoder import Texture, PixelFormat, get_buffer_size_from_texture_format, \
-    get_uncompressed_pixel_format_variant, is_compressed_pixel_format,lz4_decompress,zstd_decompress
+    get_uncompressed_pixel_format_variant, is_compressed_pixel_format, lz4_decompress, zstd_decompress
 
 to_4c_remap = {
     PixelFormat.RGBA32: PixelFormat.RGBA32,
@@ -42,8 +42,8 @@ to_4c_remap = {
 }
 
 
-def create_image_data(name, data: bytes, width: int, height: int, pixel_format: PixelFormat,
-                      flip_ud: bool = False, flip_lr: bool = False):
+def create_image_from_data(name, data: bytes, width: int, height: int, pixel_format: PixelFormat,
+                           flip_ud: bool = False, flip_lr: bool = False):
     pixels: np.ndarray
     if pixel_format == PixelFormat.RGBA8888:
         pixels = np.frombuffer(data, np.uint8).astype(np.float32) / 0xFF
@@ -60,7 +60,12 @@ def create_image_data(name, data: bytes, width: int, height: int, pixel_format: 
         texture = texture.convert_to(to_4c_remap[pixel_format])
         if texture is None:
             return None
-        return create_image_data(name, texture.data, width, height, to_4c_remap[pixel_format])
+        return create_image_from_data(name, texture.data, width, height, to_4c_remap[pixel_format])
+    pixels = pixels.reshape((width, height, -1))
+    if flip_ud:
+        pixels = np.flipud(pixels)
+    if flip_lr:
+        pixels = np.fliplr(pixels)
 
     image = bpy.data.images.new(name, width=width, height=height, alpha=True)
     image.name = name
@@ -69,3 +74,9 @@ def create_image_data(name, data: bytes, width: int, height: int, pixel_format: 
     image.pixels.foreach_set(pixels.ravel())
     image.pack()
     return image
+
+
+def create_image_from_texture(name, texture: Texture, flip_ud: bool = False, flip_lr: bool = False):
+    pixels: np.ndarray
+    return create_image_from_data(name, texture.data, texture.width, texture.height, texture.pixel_format, flip_ud,
+                                  flip_lr)

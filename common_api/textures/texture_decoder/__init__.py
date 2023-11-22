@@ -148,6 +148,14 @@ _lib.is_compressed_pixel_format.restype = ctypes.c_bool
 _lib.get_uncompressed_pixel_format_variant.argtypes = [ctypes.c_uint32]
 _lib.get_uncompressed_pixel_format_variant.restype = ctypes.c_uint32
 
+# DLL_EXPORT size_t zstd_decompress( void* dst, size_t dstCapacity, const void* src, size_t compressedSize);
+_lib.zstd_decompress.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p, ctypes.c_size_t]
+_lib.zstd_decompress.restype = ctypes.c_size_t
+
+# DLL_EXPORT size_t lz4_decompress( void* dst, size_t dstCapacity, const void* src, size_t compressedSize);
+_lib.lz4_decompress.argtypes = [ctypes.c_char_p, ctypes.c_size_t, ctypes.c_char_p, ctypes.c_size_t]
+_lib.lz4_decompress.restype = ctypes.c_size_t
+
 
 class Texture:
     def __init__(self, p):
@@ -226,3 +234,15 @@ def get_uncompressed_pixel_format_variant(pixel_format: PixelFormat) -> PixelFor
 
 def get_buffer_size_from_texture_format(width: int, height: int, pixel_format: PixelFormat) -> int:
     return _lib.get_buffer_size_from_texture_format(width, height, pixel_format)
+
+
+def lz4_decompress(data: bytes, decompressed_size: int):
+    decompressed = bytes(decompressed_size)
+    decompressed_size = _lib.lz4_decompress(decompressed, decompressed_size,data, len(data))
+    return decompressed[:decompressed_size]
+
+
+def zstd_decompress(data: bytes, decompressed_size: int):
+    decompressed = bytes(decompressed_size)
+    decompressed_size = _lib.zstd_decompress(decompressed, decompressed_size,data, len(data))
+    return decompressed[:decompressed_size]

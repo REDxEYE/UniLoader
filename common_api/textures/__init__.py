@@ -2,7 +2,7 @@ import bpy
 import numpy as np
 
 from .texture_decoder import Texture, PixelFormat, get_buffer_size_from_texture_format, \
-    get_uncompressed_pixel_format_variant, is_compressed_pixel_format
+    get_uncompressed_pixel_format_variant, is_compressed_pixel_format,lz4_decompress,zstd_decompress
 
 to_4c_remap = {
     PixelFormat.RGBA32: PixelFormat.RGBA32,

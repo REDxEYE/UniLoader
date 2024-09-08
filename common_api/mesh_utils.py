@@ -3,6 +3,8 @@ from typing import Optional
 import bpy
 import numpy as np
 
+from UniLoader.common_api import is_blender_4_1
+
 
 def add_uv_layer(name: str, uv_data: np.ndarray, mesh_data: bpy.types.Mesh,
                  vertex_indices: Optional[np.ndarray] = None,
@@ -31,7 +33,8 @@ def add_vertex_color_layer(name: str, v_color_data: np.ndarray, mesh_data: bpy.t
 
 def add_custom_normals(normals: np.ndarray, mesh_data: bpy.types.Mesh):
     mesh_data.polygons.foreach_set("use_smooth", np.ones(len(mesh_data.polygons), np.uint32))
-    mesh_data.use_auto_smooth = True
+    if not is_blender_4_1():
+        mesh_data.use_auto_smooth = True
     mesh_data.normals_split_custom_set_from_vertices(normals)
 
 

@@ -18,6 +18,9 @@ from bpy.types import Operator, AddonPreferences
 
 from .common_api import PluginInfo, LoaderInfo
 
+if "UniLoader" not in sys.modules:
+    sys.modules['UniLoader'] = sys.modules[Path(__file__).parent.stem]
+
 bl_info = {
     "name": "UniLoader",
     "author": "RED_EYE",

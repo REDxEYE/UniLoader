@@ -30,6 +30,15 @@ bl_info = {
     "description": "Addon that provide api for other importers(UniLoader sub-addons).",
     "category": "Import"
 }
+
+def is_blender_4():
+    return bpy.app.version >= (4, 0, 0)
+
+
+def is_blender_4_1():
+    return bpy.app.version >= (4, 1, 0)
+
+
 PLUGINS: dict[str, tuple[ModuleType, Any, list[tuple[LoaderInfo, Any]]]] = {}
 uniloader_folder_name = Path(__file__).absolute().parent.stem
 plugins_dir = Path(__file__).absolute().parent / "plugins"

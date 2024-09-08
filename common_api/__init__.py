@@ -1,5 +1,3 @@
-import bpy.app
-
 from .buffer_api import Buffer, FileBuffer, MemoryBuffer, WritableMemoryBuffer
 from .addon_info import PluginInfo, PropertyInfo, LoaderInfo
 from .textures import (Texture, PixelFormat, create_image_from_data, create_image_from_texture,
@@ -10,11 +8,3 @@ from .mesh_utils import add_custom_normals, add_uv_layer, add_vertex_color_layer
 from .material_utils import (create_material, load_image_from_path, create_texture_node, connect_nodes,
                              connect_nodes_group, clear_nodes, create_node, Nodes)
 from .types import Vector2, Vector3, Vector4
-
-
-def is_blender_4():
-    return bpy.app.version >= (4, 0, 0)
-
-
-def is_blender_4_1():
-    return bpy.app.version >= (4, 1, 0)

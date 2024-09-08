@@ -3,7 +3,7 @@ from typing import Optional
 import bpy
 import numpy as np
 
-from UniLoader.common_api import is_blender_4_1
+from UniLoader.bpy_helper import is_blender_4_1
 
 
 def add_uv_layer(name: str, uv_data: np.ndarray, mesh_data: bpy.types.Mesh,

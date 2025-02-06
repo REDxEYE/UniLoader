@@ -37,6 +37,12 @@ def add_custom_normals(normals: np.ndarray, mesh_data: bpy.types.Mesh):
         mesh_data.use_auto_smooth = True
     mesh_data.normals_split_custom_set_from_vertices(normals)
 
+def add_custom_normals_from_faces(normals: np.ndarray, mesh_data: bpy.types.Mesh):
+    mesh_data.polygons.foreach_set("use_smooth", np.ones(len(mesh_data.polygons), np.uint32))
+    if not is_blender_4_1():
+        mesh_data.use_auto_smooth = True
+    mesh_data.normals_split_custom_set(normals)
+
 
 def add_weights(bone_indices: np.ndarray, bone_weights: np.ndarray, bone_names: list[str], mesh_obj: bpy.types.Object):
     weight_groups = {name: mesh_obj.vertex_groups.new(name=name) for name in bone_names}

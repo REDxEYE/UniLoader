@@ -16,10 +16,11 @@ from bpy.props import (BoolProperty, CollectionProperty, EnumProperty,
                        FloatProperty, StringProperty)
 from bpy.types import Operator, AddonPreferences
 
-from .common_api import PluginInfo, LoaderInfo
 
 if "UniLoader" not in sys.modules:
     sys.modules['UniLoader'] = sys.modules[Path(__file__).parent.stem]
+
+from .common_api import PluginInfo, LoaderInfo
 
 bl_info = {
     "name": "UniLoader",

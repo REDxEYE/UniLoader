@@ -201,10 +201,9 @@ class Buffer(abc.ABC, io.RawIOBase):
     def slice(self, offset: Optional[int] = None, size: int = -1) -> 'Buffer':
         raise NotImplementedError
 
-    def read_structure_array(self, offset, count, data_class: Type['Readable']):
+    def read_structure_array(self, count, data_class: Type['Readable']):
         if count == 0:
             return []
-        self.seek(offset)
         object_list = []
         for _ in range(count):
             obj = data_class.from_buffer(self)

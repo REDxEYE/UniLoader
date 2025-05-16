@@ -130,6 +130,17 @@ class Buffer(abc.ABC, io.RawIOBase):
             else:
                 buffer += chunk
 
+    def read_varint(self):
+        value = 0
+        shift = 0
+        while True:
+            value_byte = self.read_uint8()
+            value |= (value_byte & 0x7F) << shift
+            shift += 7
+            if value_byte & 0x80 == 0:
+                break
+        return value
+
     def read_fourcc(self):
         return self.read_ascii_string(4)
 

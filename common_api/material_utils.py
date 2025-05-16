@@ -16,6 +16,15 @@ def create_material(mat_name, model_obj):
     model_data.materials.append(mat)
     return mat
 
+def new_material(mat_name):
+    mat = bpy.data.materials.get(mat_name, None)
+    if mat:
+        return mat
+    else:
+        mat = bpy.data.materials.new(mat_name)
+        mat.diffuse_color = [random.uniform(.4, 1) for _ in range(3)] + [1.0]
+    return mat
+
 
 class Nodes:
     ShaderNodeAddShader = 'ShaderNodeAddShader'

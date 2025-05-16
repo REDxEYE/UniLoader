@@ -43,7 +43,7 @@ to_4c_remap = {
 
 
 def create_image_from_data(name, data: bytes, width: int, height: int, pixel_format: PixelFormat,
-                           flip_ud: bool = False, flip_lr: bool = False):
+                           flip_ud: bool = False, flip_lr: bool = False, is_data: bool = False):
     pixels: np.ndarray
     if pixel_format == PixelFormat.RGBA8888:
         pixels = np.frombuffer(data, np.uint8).astype(np.float32) / 0xFF
@@ -60,17 +60,23 @@ def create_image_from_data(name, data: bytes, width: int, height: int, pixel_for
         texture = texture.convert_to(to_4c_remap[pixel_format])
         if texture is None:
             return None
-        return create_image_from_data(name, texture.data, width, height, to_4c_remap[pixel_format])
+        return create_image_from_data(name, texture.data, width, height, to_4c_remap[pixel_format], flip_ud, flip_lr,
+                                      is_data)
     pixels = pixels.reshape((width, height, -1))
     if flip_ud:
         pixels = np.flipud(pixels)
     if flip_lr:
         pixels = np.fliplr(pixels)
-
-    image = bpy.data.images.new(name, width=width, height=height, alpha=True)
+    if pixels.max() > 1.0 or is_data:
+        image = bpy.data.images.new(name, width=width, height=height, alpha=True, float_buffer=True, is_data=True)
+    else:
+        image = bpy.data.images.new(name, width=width, height=height, alpha=True)
     image.name = name
     image.alpha_mode = "CHANNEL_PACKED"
-    # image.file_format = "HDR" if is_hdr else "PNG"
+    if pixels.max() > 1.0 or is_data:
+        image.colorspace_settings.is_data = True
+        image.colorspace_settings.name = 'Non-Color'
+        image.file_format = "HDR"
     image.pixels.foreach_set(pixels.ravel())
     image.pack()
     return image

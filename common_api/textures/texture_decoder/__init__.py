@@ -50,13 +50,17 @@ class PixelFormat(IntEnum):
     R16F = auto()
     RGBA8888 = auto()
     BGRA8888 = auto()
+    ABGR8888 = auto()
+    ARGB8888 = auto()
     RGB888 = auto()
+    BGR888 = auto()
     RG88 = auto()
     RA88 = auto()
     R8 = auto()
     RGB565 = auto()
     RGBA5551 = auto()
     RGBA1010102 = auto()
+    RGBA4444 = auto()
     BC1 = auto()
     BC1a = auto()
     BC2 = auto()
@@ -65,6 +69,8 @@ class PixelFormat(IntEnum):
     BC5 = auto()
     BC6 = auto()
     BC7 = auto()
+    ETC1 = auto()
+    RGBA1111 = auto()
 
 
 # int64_t get_buffer_size_from_texture(const sTexture *texture);
@@ -120,6 +126,10 @@ _lib.free_texture.restype = None
 _lib.load_dds.argtypes = [ctypes.c_char_p]
 _lib.load_dds.restype = ctypes.POINTER(_Texture)
 
+# sTexture *load_dds_from_data(const char *data, uint32_t dataSize);
+_lib.load_dds_from_data.argtypes = [ctypes.c_char_p, ctypes.c_uint32]
+_lib.load_dds_from_data.restype = ctypes.POINTER(_Texture)
+
 # sTexture *load_pvr(char *filename);
 _lib.load_pvr.argtypes = [ctypes.c_char_p]
 _lib.load_pvr.restype = ctypes.POINTER(_Texture)
@@ -143,6 +153,10 @@ _lib.write_tga.restype = ctypes.c_bool
 # sTexture *load_hdr(const char *filename);
 _lib.load_hdr.argtypes = [ctypes.c_char_p]
 _lib.load_hdr.restype = ctypes.POINTER(_Texture)
+
+# DLL_EXPORT void print_all_converters();
+_lib.print_all_converters.argtypes = []
+_lib.print_all_converters.restype = None
 
 # bool is_compressed_pixel_format(ePixelFormat pixelFormat);
 _lib.is_compressed_pixel_format.argtypes = [ctypes.c_uint32]
@@ -169,8 +183,10 @@ class Texture:
         _lib.free_texture(self.ptr)
 
     @classmethod
-    def from_dds(cls, path: Path) -> 'Texture':
-        return cls(_lib.load_dds(str(path).encode("utf8")))
+    def from_dds(cls, path_or_data: Path|bytes) -> 'Texture':
+        if isinstance(path_or_data, bytes):
+            return cls(_lib.load_dds_from_data(path_or_data, len(path_or_data)))
+        return cls(_lib.load_dds(str(path_or_data).encode("utf8")))
 
     @classmethod
     def from_png(cls, path: Path, expected_channels: int = 0) -> 'Texture':
@@ -258,6 +274,8 @@ class Texture:
     def __bool__(self):
         return bool(self.ptr)
 
+def print_all_supported_formats():
+    _lib.print_all_converters()
 
 def is_compressed_pixel_format(pixel_format: PixelFormat) -> bool:
     return _lib.is_compressed_pixel_format(pixel_format)

@@ -1,7 +1,9 @@
 from itertools import chain
+from pathlib import Path
 from typing import Tuple, Optional, List, get_args, get_origin, get_type_hints, Type, Container, Union, Iterable, \
     Callable, Any
 from xml.etree.ElementTree import Element
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -68,6 +70,13 @@ class XChild(XCommon):
         if self.alias is None:
             self.alias = name
 
+@dataclass(slots=True, init=False)
+class XValue(XCommon):
+
+    def __init__(self, deserializer: Optional[Callable[[str], Any]] = None):
+        self.alias = None
+        self.aliases = []
+        self.deserializer = deserializer
 
 SupportedTypes = Type[Union[int, float, bool, str, 'XmlAutoDeserialize']]
 
@@ -131,6 +140,16 @@ class XmlAutoDeserialize:
             xattr_descriptor = getattr(cls, attr_name, None)
             if xattr_descriptor is None:
                 xattr_descriptor = XChild(attr_name)
+
+            if isinstance(xattr_descriptor, XValue):
+                value = element.text
+                if value is None:
+                    kwargs[attr_name] = None
+                elif xattr_descriptor.deserializer is not None:
+                    kwargs[attr_name] = xattr_descriptor.deserializer(value)
+                else:
+                    kwargs[attr_name] = attr_type(value)
+                continue
 
             origin = get_origin(attr_type)
             if isinstance(xattr_descriptor, XChild):
@@ -196,6 +215,10 @@ class XmlAutoDeserialize:
         obj = cls()
         obj.__dict__.update(kwargs)
         return obj
+
+    @classmethod
+    def from_path(cls, path:Path):
+        return  cls.from_xml(ET.parse(path).getroot())
 
 
 replace_list = [

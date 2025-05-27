@@ -49,3 +49,9 @@ class ContentManager:
             raise ValueError("Provider already mounted")
         print("Mounted:", provider.name())
         self.mounts.append(provider)
+
+    def unmount(self, provider: ContentProvider):
+        if provider not in self.mounts:
+            raise ValueError("Provider not mounted")
+        print("Unmounted:", provider.name())
+        self.mounts.remove(provider)

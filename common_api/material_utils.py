@@ -153,6 +153,12 @@ def create_texture_node(material, texture, name=None, location=None):
         texture_node.location = location
     return texture_node
 
+def create_node_group(material, group_name: str):
+    node_tree = material.node_tree
+    group_node = node_tree.nodes.new('ShaderNodeGroup')
+    group_node.node_tree = bpy.data.node_groups[group_name]
+    return group_node
+
 
 def connect_nodes(material, output_socket, input_socket):
     material.node_tree.links.new(output_socket, input_socket)

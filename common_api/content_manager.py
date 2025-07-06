@@ -55,3 +55,7 @@ class ContentManager:
             raise ValueError("Provider not mounted")
         print("Unmounted:", provider.name())
         self.mounts.remove(provider)
+
+    def files(self)->Iterable[tuple[str, Buffer]]:
+        for mount in self.mounts:
+            yield from mount.glob("*")

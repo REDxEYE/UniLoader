@@ -2,6 +2,7 @@ import abc
 import binascii
 import contextlib
 import io
+import math
 import os
 import struct
 from pathlib import Path
@@ -13,6 +14,26 @@ class Buffer(abc.ABC, io.RawIOBase):
     def __init__(self):
         io.RawIOBase.__init__(self)
         self._endian = '<'
+
+    @abc.abstractmethod
+    def read(self, _size: int = -1) -> bytes:
+        pass
+
+    @abc.abstractmethod
+    def write(self, _b: Union[bytes, bytearray]) -> int:
+        pass
+
+    @abc.abstractmethod
+    def seek(self, offset: int, whence: int = io.SEEK_SET) -> int:
+        pass
+
+    @abc.abstractmethod
+    def tell(self) -> int:
+        pass
+
+    def to_hex(self):
+        with self.save_current_offset():
+            return binascii.hexlify(self.data).decode('ascii')
 
     @contextlib.contextmanager
     def save_current_offset(self):
@@ -107,6 +128,13 @@ class Buffer(abc.ABC, io.RawIOBase):
 
     def read_double(self):
         return self._read('d')
+
+    def read_padded_ascii_string(self):
+        string = self.read_ascii_string()
+        str_len = len(string)
+        pad = (math.ceil((str_len + 1) / 4) * 4) - (str_len + 1)
+        self.skip(pad)
+        return string
 
     def read_ascii_string(self, length=None):
         if length is not None:
@@ -277,7 +305,7 @@ class MemoryBuffer(Buffer):
 
         return self._offset
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return f'<MemoryBuffer {self.tell()}/{self.size()}>'
 
     def tell(self) -> int:
@@ -300,6 +328,7 @@ class MemoryBuffer(Buffer):
 
 
 class WritableMemoryBuffer(io.BytesIO, Buffer):
+
     def __init__(self, initial_bytes=None):
         io.BytesIO.__init__(self, initial_bytes)
         Buffer.__init__(self)
@@ -319,8 +348,19 @@ class WritableMemoryBuffer(io.BytesIO, Buffer):
             return MemoryBuffer(self.data[offset:])
         return MemoryBuffer(self.data[offset:offset + size])
 
+    def tell(self) -> int:
+        return io.BytesIO.tell(self)
+
+    def seek(self, offset: int, whence: int = io.SEEK_SET) -> int:
+        return io.BytesIO.seek(self, offset, whence)
+
+    def __repr__(self) -> str:
+        return f'<WritableMemoryBuffer {self.tell()}/{self.size()}>'
+
 
 class FileBuffer(io.FileIO, Buffer):
+
+
 
     def __init__(self, file: Union[str, Path, int], mode: str = 'r', closefd: bool = True, opener=None) -> None:
         io.FileIO.__init__(self, file, mode, closefd, opener)
@@ -349,7 +389,7 @@ class FileBuffer(io.FileIO, Buffer):
         self.seek(offset)
         return _data
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         return f'<FileBuffer: {self.name!r} {self.tell()}/{self.size()}>'
 
     def slice(self, offset: Optional[int] = None, size: int = -1) -> 'Buffer':
@@ -361,6 +401,11 @@ class FileBuffer(io.FileIO, Buffer):
                 return MemoryBuffer(self.read())
             return MemoryBuffer(self.read(size))
 
+    def seek(self, offset: int, whence: int = io.SEEK_SET) -> int:
+        return io.FileIO.seek(self, offset, whence)
+
+    def tell(self) -> int:
+        return io.FileIO.tell(self)
 
 T = TypeVar("T")
 

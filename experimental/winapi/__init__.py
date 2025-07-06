@@ -33,6 +33,7 @@ class D3DCompiler(CDLL):
         self.D3DReflect.argtypes = [c_char_p, c_size_t, c_char_p, POINTER(c_void_p)]
         self.D3DReflect.restype = HRESULT
 
+
     def disassemble(self, source: bytes, flags: int) -> ID3DBlob:
         blob = ID3DBlob()
         res = self.D3DDisassemble(source, len(source), flags, c_char_p(0), byref(blob))

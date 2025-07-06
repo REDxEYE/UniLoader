@@ -102,6 +102,11 @@ def _load_plugin(plugin_dirname: str):
             "bl_label": plugin_info["name"]
         }
     )
+
+    if properties:=plugin_info.get("properties"):
+        pass
+
+
     new_classes.append(plugin_menu_operator)
     PLUGINS[plugin_dirname] = plugin, plugin_menu_operator, loaders
     for cls in new_classes:
@@ -170,6 +175,8 @@ def _scan_plugins():
     enabled_addons = [addon.plugin_dir_name for addon in registered_addons if addon.enabled]
 
     for plugin_dir in plugins_dir.iterdir():
+        if plugin_dir.stem.startswith("__") and plugin_dir.stem.endswith("__"):
+            continue
         if plugin_dir.stem in known_addons:
             if plugin_dir.stem in enabled_addons:
                 _load_plugin(plugin_dir.stem)
